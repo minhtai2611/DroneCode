@@ -89,6 +89,9 @@ int main(int argc, char **argv)
     mavros_msgs::SetMode offb_set_mode;
     offb_set_mode.request.custom_mode = "GUIDED";
 
+    mavros_msgs::SetMode loiter_set_mode;
+    loiter_set_mode.request.custom_mode ="LAND";
+
     mavros_msgs::SetMode RTL_set_mode;
     RTL_set_mode.request.custom_mode ="RTL";
 
@@ -107,8 +110,18 @@ int main(int argc, char **argv)
     geometry_msgs::TwistStamped z_vel;
     z_vel.twist.linear.z = -1;
 
+    mavros_msgs::GlobalPositionTarget home;
     mavros_msgs::GlobalPositionTarget target;
     float desired_altitude = 10;
+
+    home.latitude = lat_gps;
+    home.longitude = lon_gps;
+    home.velocity.x = 1;
+    home.velocity.y = 1;
+    home.altitude = Home_altitude + desired_altitude;
+    home.coordinate_frame=5;
+    home.type_mask = 0b000011111111110;
+    home.header.frame_id="base_link";
     
     target.latitude = -35.362350;
     target.longitude = 149.165103;
@@ -174,11 +187,34 @@ int main(int argc, char **argv)
 	ROS_INFO("Current Altitude %f", z_current);
 	ros::spinOnce();
         rate.sleep();
-   	
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
     }
    int count = 0;
    float dist =100.0;
    while (ros::ok() && dist > 20){
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
 	dist = Distance_calculator(lat_gps,lon_gps,target.latitude,target.longitude);
         target.header.seq = count;
 	target.header.stamp = ros::Time::now();
@@ -199,6 +235,18 @@ int main(int argc, char **argv)
    //count = 0;
    dist = z_current*100;
    while(ros::ok() && dist > 150){
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
 	dist = range.fusedRange;
         z_vel.header.seq = count;
 	z_vel.header.stamp = ros::Time::now();
@@ -229,6 +277,18 @@ int main(int argc, char **argv)
     pump.data=false;
     count = 0;
    while(ros::ok() && count < 30){
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
    	 pumper_pub.publish(pump);
 	 count++;
    	 ros::spinOnce();
@@ -239,12 +299,50 @@ int main(int argc, char **argv)
 //*********Finishing Sampling Task**********
 //******************************************
 //******************************************
-     if(set_mode_client.call(RTL_set_mode)){
+     dist = 5000;
+     while (ros::ok() && dist > 20){
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
+	dist = Distance_calculator(lat_gps,lon_gps,home.latitude,home.longitude);
+        home.header.seq = count;
+	home.header.stamp = ros::Time::now();
+	global_pos_pub.publish(home);
+        ROS_INFO("Distance to home : %f", dist);
+	count++;
+   	ros::spinOnce();
+        fast_rate.sleep();
+     }
+
+     ros::Duration(5.0).sleep();
+
+     if(cmd_client.call(land_srv)){
 	ROS_INFO("Time to come back !");
      }else{
 	ROS_INFO("LAND failed !!");
      }
     while(current_state.armed){
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
 	ROS_INFO("I'm comming back");
 	ros::spinOnce();
         fast_rate.sleep();
