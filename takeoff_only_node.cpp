@@ -40,13 +40,15 @@ int main(int argc, char **argv){
     //the setpoint publishing rate MUST be faster than 2Hz
     ros::Rate rate(20.0);
     ros::Rate fast_rate(1.0);
-
+    ROS_INFO("Waiting for FCU Connection !!!");
+    ros::Duration(5.0).sleep();
     // wait for FCU connection
     while(ros::ok() && !current_state.connected){
         ros::spinOnce();
         rate.sleep();
     }
-
+    ROS_INFO("FCU Connected");
+    ros::Duration(2.0).sleep();
 
     mavros_msgs::CommandLong takeoff_srv;
     takeoff_srv.request.command = 22; //NAV_TAKEOFF
@@ -57,6 +59,10 @@ int main(int argc, char **argv){
 
     mavros_msgs::SetMode offb_set_mode;
     offb_set_mode.request.custom_mode = "GUIDED";
+   
+    mavros_msgs::SetMode loiter_set_mode;
+    loiter_set_mode.request.custom_mode = "LAND";
+
 
     mavros_msgs::SetMode RTL_set_mode;
     RTL_set_mode.request.custom_mode ="RTL";
@@ -77,13 +83,24 @@ int main(int argc, char **argv){
         fast_rate.sleep();
 	
        } 
+
     while(ros::ok() && (fix_type < 2)){
 	ROS_INFO("GPS fix type %d", fix_type);
 	ros::spinOnce();
-	rate.sleep();
+	fast_rate.sleep();
 	}
 
     ROS_INFO("GPS fix type %d", fix_type);
+    ROS_INFO("Ready to go !!");
+    ros::Duration(5.0).sleep();
+
+    ROS_INFO("Plug out the cable noww!!!");
+    int count_safe = 0;
+    while(ros::ok() && count_safe < 30){
+       count_safe++;
+	ROS_INFO("It is %d second remaining", count_safe);
+       ros::Duration(1.0).sleep();
+    }
 
     while(ros::ok() && !current_state.armed){
           if(arming_client.call(arm_cmd)){
@@ -106,25 +123,48 @@ int main(int argc, char **argv){
      }
 
    while(ros::ok() && z_current < 9.0){
-		
 	ROS_INFO("Current Altitude %f", z_current);
 	ros::spinOnce();
         rate.sleep();
    	
     }
-    ros::Duration(10.0).sleep();
-    if(set_mode_client.call(RTL_set_mode)){
+    ros::Duration(5.0).sleep();
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
+ 
+    if(cmd_client.call(land_srv)){
 	ROS_INFO("Time to come back !");
      }else{
 	ROS_INFO("LAND failed !!");
      }
     while(current_state.armed){
+      //Over Altitude Handle 
+      //***************************
+      //****************************
+        if(z_current > 15.0){
+         set_mode_client.call(loiter_set_mode);
+         while(1){
+          ROS_INFO("Dangerous Altitude !");
+          ros::Duration(2.0).sleep();
+         }
+       }
+      //***************************
+      //***************************
 	ROS_INFO("I'm comming back");
 	ros::spinOnce();
         fast_rate.sleep();
 	}
 
     return 0;
-
-
 }
+
