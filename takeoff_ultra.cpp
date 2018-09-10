@@ -127,8 +127,8 @@ int main(int argc, char **argv)
     home.type_mask = 0b000011111111110;
     home.header.frame_id="base_link";
     
-    target.latitude = -35.362350;
-    target.longitude = 149.165103;
+    target.latitude = 11.053180;
+    target.longitude = 106.665682;
     target.velocity.x = 1;
     target.velocity.y = 1;
     target.altitude = Home_altitude + desired_altitude;
