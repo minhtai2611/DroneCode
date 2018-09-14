@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <std_msgs/Float64.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/CommandLong.h>
 #include <mavros_msgs/SetMode.h>
@@ -13,11 +14,11 @@
 
 float z_current = 0.0;
 uint8_t fix_type =0.0;
-float Home_altitude =0.0;
+double Home_altitude =0.0;
 mavros_msgs::State current_state;
 new_message::Ranges range;
-float lat_gps= 0.0;
-float lon_gps= 0.0;
+double lat_gps= 0.0;
+double lon_gps= 0.0;
 bool wet_sens = false;
 bool safe_ok = false;
 bool descend_cmd = false;
@@ -37,12 +38,12 @@ void gps_fix_cb(const sensor_msgs::NavSatFix::ConstPtr& msg){
     lat_gps = msg->latitude;
     lon_gps = msg->longitude;
 }
-float Distance_calculator(float lat1, float lon1, float lat2,float lon2){
-	float d_lat = lat1-lat2;
-	float d_lon = lon1-lon2;
-	const float R = 6371e3;
-	float a = sin(d_lat/2)*sin(d_lat/2)+cos(lat1)*cos(lat2)*sin(d_lon/2)*sin(d_lon/2);
-	float c =2*atan2(sqrt(a),sqrt(1-a));
+double Distance_calculator(double lat1, double  lon1, double  lat2,double lon2){
+	double d_lat = lat1-lat2;
+	double d_lon = lon1-lon2;
+	const double R = 6371e3;
+	double a = sin(d_lat/2)*sin(d_lat/2)+cos(lat1)*cos(lat2)*sin(d_lon/2)*sin(d_lon/2);
+	double c =2*atan2(sqrt(a),sqrt(1-a));
 	return 1.113195e5*sqrt((d_lat*d_lat) + (d_lon*d_lon));
 }
 
@@ -120,8 +121,8 @@ int main(int argc, char **argv)
 
     home.latitude = lat_gps;
     home.longitude = lon_gps;
-    home.velocity.x = 1;
-    home.velocity.y = 1;
+   // home.velocity.x = 1;
+    //home.velocity.y = 1;
     home.altitude = Home_altitude + desired_altitude;
     home.coordinate_frame=5;
     home.type_mask = 0b000011111111110;
@@ -158,7 +159,7 @@ int main(int argc, char **argv)
         fast_rate.sleep();
 	
        } 
-    while(ros::ok() && (fix_type < 2)){
+    while(ros::ok() && (fix_type < 1)){
 	ROS_INFO("GPS fix type %d", fix_type);
 	ros::spinOnce();
 	rate.sleep();
@@ -186,9 +187,10 @@ int main(int argc, char **argv)
 	ROS_INFO("Takeoff failed !!");
      }
 
-   while(ros::ok() && z_current < 4.8){
+   while(ros::ok() && z_current < 4.2){
 		
 	ROS_INFO("Current Altitude %f", z_current);
+	ROS_INFO("Current Ultra Range %f", range.fusedRange);
 	ros::spinOnce();
         rate.sleep();
       // Over Altitude Handle 
@@ -214,30 +216,29 @@ int main(int argc, char **argv)
 //******************************************
    ROS_INFO("Start Descending");
    ros::Duration(5.0).sleep();
-   //count = 0;
    
    
    while(ros::ok()){
 
-        if(range.Range1 > 750){
+        if(range.Range1 > 550){
 		wet_sens = true;
 	}else wet_sens = false;
 
 	dist = range.fusedRange;
 
-	if(z_current > 2.5){
+	if(z_current > 2.0){
 		descend_cmd = true;
 	}else{
 	        
 		if((wet_sens == false)){
 		
-			if(dist < 50){
+			if(dist < 80){
 				ROS_INFO("Altitude below Threshold!");
 				ROS_INFO("z Distance : %f", z_current);
 	                        ROS_INFO("Range : %f", dist);
 				safe_ok = false;
 				descend_cmd = false;
-				break;
+		
 			}else{
 			        ROS_INFO("Descending");
 			        descend_cmd = true;
@@ -248,14 +249,18 @@ int main(int argc, char **argv)
                          ROS_INFO("Start Sampling Task");
                          safe_ok = true;
                          descend_cmd = false;
-                         break;
+                      
 		}
 	}
 	
 	if (descend_cmd){
+
 	        z_vel.header.seq = count;
+	       
 	        z_vel.header.stamp = ros::Time::now();
-                z_vel.twist.linear.z = -0.05*z_current;
+                z_vel.twist.linear.z = -0.2;
+	        z_vel.twist.linear.x = 0;
+	        z_vel.twist.linear.y = 0;
 	        cmd_vel_pub.publish(z_vel);
      //*************** 
      //***************
@@ -275,6 +280,33 @@ int main(int argc, char **argv)
       //***************************
      //*************** 
      //***************
+	}else{
+                z_vel.header.seq = count;
+
+                z_vel.header.stamp = ros::Time::now();
+                z_vel.twist.linear.z = 0;
+                z_vel.twist.linear.x = 0;
+                z_vel.twist.linear.y = 0;
+                cmd_vel_pub.publish(z_vel);
+     //*************** 
+     //***************
+                ROS_INFO("z Distance : %f", z_current);
+                ROS_INFO("Range : %f", dist);
+     // Over Altitude Handle 
+      // ***************************
+      //****************************
+                if(z_current > 15.0){
+                    set_mode_client.call(loiter_set_mode);
+                while(1){
+                        ROS_INFO("Dangerous Altitude !");
+                        ros::Duration(2.0).sleep();
+                }
+               }
+      //***************************
+      //***************************
+     //*************** 
+     //***************
+		break;
 	}
       
 	count++;
@@ -287,7 +319,7 @@ int main(int argc, char **argv)
     count = 0;
     wet_sens = false;
    while(ros::ok() && count < 30 ){
-	if(range.Range1 > 750){
+	if(range.Range1 > 550){
 		wet_sens = true;
 	}else wet_sens = false;
 	if ((range.fusedRange < 150)&&(z_current > 10.0)){
@@ -305,7 +337,7 @@ int main(int argc, char **argv)
     
     pump.data=false;
     count = 0;
-   while(ros::ok() && count < 30){
+   while(ros::ok() && count < 20){
       // Over Altitude Handle 
       // ***************************
       //****************************
@@ -325,7 +357,63 @@ int main(int argc, char **argv)
     }
  
  }
-   
+   ROS_INFO("Start Climbing to 5 meter");
+   ros::Duration(3.0).sleep();
+//Climb to 5 meter//******
+//************************
+/************************/
+	count = 0;
+	while(ros::ok()){
+		if(z_current < 4.2){
+		
+		z_vel.header.seq = count;
+	       
+	        z_vel.header.stamp = ros::Time::now();
+                z_vel.twist.linear.z = 0.3;
+	        z_vel.twist.linear.x = 0;
+	        z_vel.twist.linear.y = 0;
+	        cmd_vel_pub.publish(z_vel);
+     //*************** 
+     //***************
+                ROS_INFO("z Distance : %f", z_current);
+	        ROS_INFO("Range : %f", dist);
+      // Over Altitude Handle 
+      // ***************************
+      //****************************
+                if(z_current > 15.0){
+                    set_mode_client.call(loiter_set_mode);
+                while(1){
+                        ROS_INFO("Dangerous Altitude !");
+                        ros::Duration(2.0).sleep();
+                }
+               }
+      //***************************
+      //***************************
+     //*************** 
+     //***************
+
+		}else{
+			 z_vel.header.seq = count;
+	       
+	        	 z_vel.header.stamp = ros::Time::now();
+               		 z_vel.twist.linear.z = 0;
+	       		 z_vel.twist.linear.x = 0;
+	       		 z_vel.twist.linear.y = 0;
+	       		 cmd_vel_pub.publish(z_vel);
+			 home.altitude = Home_altitude;
+			 break;
+		}
+		
+		count++;
+   		ros::spinOnce();
+   	        rate.sleep();
+
+	}
+	
+
+ROS_INFO("Altitude Reached !!");
+ros::Duration(3.0).sleep();
+
 //******************************************
 //******************************************
 //*********Finishing Sampling Task**********
