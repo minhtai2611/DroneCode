@@ -22,6 +22,9 @@ double lon_gps= 0.0;
 bool wet_sens = false;
 bool safe_ok = false;
 bool descend_cmd = false;
+bool get_home = true;
+mavros_msgs::GlobalPositionTarget home;
+
 void state_cb(const mavros_msgs::State::ConstPtr& msg){
     current_state = *msg;
 }
@@ -35,8 +38,14 @@ void alt_cb(const geometry_msgs::PoseStamped::ConstPtr& ksg){
 void gps_fix_cb(const sensor_msgs::NavSatFix::ConstPtr& msg){
     fix_type = msg->position_covariance_type;
     Home_altitude = msg->altitude;
-    lat_gps = msg->latitude;
-    lon_gps = msg->longitude;
+   if(get_home){
+    	home.latitude = msg->latitude;
+    	home.longitude = msg->longitude;
+	get_home = false;
+    }else{	
+	lat_gps = msg->latitude;
+    	lon_gps = msg->longitude;
+	}
 }
 double Distance_calculator(double lat1, double  lon1, double  lat2,double lon2){
 	double d_lat = lat1-lat2;
@@ -115,12 +124,12 @@ int main(int argc, char **argv)
     geometry_msgs::TwistStamped z_vel;
     z_vel.twist.linear.z = -1;
 
-    mavros_msgs::GlobalPositionTarget home;
+//    mavros_msgs::GlobalPositionTarget home;
     mavros_msgs::GlobalPositionTarget target;
-    float desired_altitude = 5;
+    double desired_altitude = 5;
 
-    home.latitude = lat_gps;
-    home.longitude = lon_gps;
+//    home.latitude = lat_gps;
+ //   home.longitude = lon_gps;
    // home.velocity.x = 1;
     //home.velocity.y = 1;
     home.altitude = Home_altitude + desired_altitude;
@@ -195,7 +204,7 @@ int main(int argc, char **argv)
         rate.sleep();
       // Over Altitude Handle 
       // ***************************
-      //****************************
+      //****************************//
         if(z_current > 15.0){
          set_mode_client.call(loiter_set_mode);
          while(1){
@@ -203,8 +212,8 @@ int main(int argc, char **argv)
           ros::Duration(2.0).sleep();
          }
        }
-      //***************************
-      //***************************
+      //***************************/
+      //***************************/
     }
    int count = 0;
    float dist =100.0;
@@ -213,21 +222,28 @@ int main(int argc, char **argv)
 //******************************************
 //***********Starting Sampling Task*********
 //******************************************
-//******************************************
+//******************************************/
    ROS_INFO("Start Descending");
    ros::Duration(5.0).sleep();
    
    
    while(ros::ok()){
 
-        if(range.Range1 > 550){
+        if(range.Range1 > 200){
 		wet_sens = true;
 	}else wet_sens = false;
 
 	dist = range.fusedRange;
 
 	if(z_current > 2.0){
-		descend_cmd = true;
+		if(dist < 60){
+			ROS_INFO("Altitude Below Threshold");
+			ROS_INFO("z Distance : %f", z_current);
+			ROS_INFO("Range : %f", dist);
+			safe_ok = false;
+			descend_cmd = false;
+		}else
+			descend_cmd = true;
 	}else{
 	        
 		if((wet_sens == false)){
@@ -258,17 +274,17 @@ int main(int argc, char **argv)
 	        z_vel.header.seq = count;
 	       
 	        z_vel.header.stamp = ros::Time::now();
-                z_vel.twist.linear.z = -0.2;
+                z_vel.twist.linear.z = -0.15;
 	        z_vel.twist.linear.x = 0;
 	        z_vel.twist.linear.y = 0;
 	        cmd_vel_pub.publish(z_vel);
      //*************** 
-     //***************
+     //***************/
                 ROS_INFO("z Distance : %f", z_current);
 	        ROS_INFO("Range : %f", dist);
       // Over Altitude Handle 
       // ***************************
-      //****************************
+      //****************************/
                 if(z_current > 15.0){
                     set_mode_client.call(loiter_set_mode);
                 while(1){
@@ -279,22 +295,33 @@ int main(int argc, char **argv)
       //***************************
       //***************************
      //*************** 
-     //***************
+     //***************/
 	}else{
-                z_vel.header.seq = count;
+               
+		z_vel.header.seq = count;
+                z_vel.header.stamp = ros::Time::now();
+                z_vel.twist.linear.z = 0.2;
+                z_vel.twist.linear.x = 0;
+                z_vel.twist.linear.y = 0;
+                cmd_vel_pub.publish(z_vel);
+		
+		count++;
 
+		ros::Duration(1.0).sleep();
+
+	        z_vel.header.seq = count;
                 z_vel.header.stamp = ros::Time::now();
                 z_vel.twist.linear.z = 0;
                 z_vel.twist.linear.x = 0;
                 z_vel.twist.linear.y = 0;
                 cmd_vel_pub.publish(z_vel);
      //*************** 
-     //***************
+     //***************/
                 ROS_INFO("z Distance : %f", z_current);
                 ROS_INFO("Range : %f", dist);
      // Over Altitude Handle 
       // ***************************
-      //****************************
+      //****************************/
                 if(z_current > 15.0){
                     set_mode_client.call(loiter_set_mode);
                 while(1){
@@ -305,7 +332,7 @@ int main(int argc, char **argv)
       //***************************
       //***************************
      //*************** 
-     //***************
+     //***************/
 		break;
 	}
       
@@ -313,16 +340,17 @@ int main(int argc, char **argv)
    	ros::spinOnce();
         rate.sleep();
     }
- if (safe_ok){
- 
+ROS_INFO("Start to do something next !");
+ros::Duration(2.0).sleep();
+ if (safe_ok){ 
     pump.data=true;
     count = 0;
     wet_sens = false;
-   while(ros::ok() && count < 30 ){
+   while(ros::ok() && count < 20 ){
 	if(range.Range1 > 550){
 		wet_sens = true;
 	}else wet_sens = false;
-	if ((range.fusedRange < 150)&&(z_current > 10.0)){
+	if ((range.fusedRange < 60)&&(z_current > 10.0)){
 		ROS_INFO("Dangerous case!");
          	break;
          }
@@ -340,7 +368,7 @@ int main(int argc, char **argv)
    while(ros::ok() && count < 20){
       // Over Altitude Handle 
       // ***************************
-      //****************************
+      //****************************/
         if(z_current > 15.0){
          set_mode_client.call(loiter_set_mode);
          while(1){
@@ -349,7 +377,7 @@ int main(int argc, char **argv)
          }
        }
       //***************************
-      //***************************
+      //***************************/
    	 pumper_pub.publish(pump);
 	 count++;
    	 ros::spinOnce();
@@ -464,6 +492,8 @@ ros::Duration(3.0).sleep();
       //***************************
       //***************************
 	ROS_INFO("I'm comming back");
+	ROS_INFO("Lat: %f", home.latitude);
+	ROS_INFO("Lon: %f", home.longitude);
 	ros::spinOnce();
         fast_rate.sleep();
 	}
