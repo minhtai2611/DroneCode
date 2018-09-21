@@ -128,13 +128,12 @@ int main(int argc, char **argv)
     mavros_msgs::GlobalPositionTarget target;
     double desired_altitude = 5;
 
-//    home.latitude = lat_gps;
- //   home.longitude = lon_gps;
-   // home.velocity.x = 1;
-    //home.velocity.y = 1;
+
+    home.velocity.x = 0;
+    home.velocity.y = 0;
     home.altitude = Home_altitude + desired_altitude;
-    home.coordinate_frame=5;
-    home.type_mask = 0b000011111111110;
+    home.coordinate_frame=1;
+    home.type_mask = 0b000011111111000;
     home.header.frame_id="base_link";
     
     target.latitude = 11.053180;
@@ -143,7 +142,7 @@ int main(int argc, char **argv)
     target.velocity.y = 1;
     target.altitude = Home_altitude + desired_altitude;
     target.coordinate_frame=5;
-    target.type_mask = 0b000011111111110;
+    target.type_mask = 0b000011111111000;
     target.header.frame_id="base_link";
 
     for(int i = 100; ros::ok() && i > 0; --i){
@@ -236,6 +235,7 @@ int main(int argc, char **argv)
 	dist = range.fusedRange;
 
 	if(z_current > 2.0){
+#ifdef _REAL_FLIGHT_
 		if(dist < 60){
 			ROS_INFO("Altitude Below Threshold");
 			ROS_INFO("z Distance : %f", z_current);
@@ -243,6 +243,7 @@ int main(int argc, char **argv)
 			safe_ok = false;
 			descend_cmd = false;
 		}else
+#endif
 			descend_cmd = true;
 	}else{
 	        
