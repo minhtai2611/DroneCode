@@ -11,7 +11,7 @@
 #include <math.h>
 #include <std_msgs/Bool.h>
 #include "../../../devel/include/new_message/Ranges.h"
-//#define _REAL_FLIGHT_
+#define _REAL_FLIGHT_
 float z_current = 0.0;
 uint8_t fix_type =0.0;
 double Home_altitude =0.0;
@@ -135,13 +135,10 @@ int main(int argc, char **argv)
     home.coordinate_frame = 1;
     home.type_mask = 0b000011111111000;
     home.header.frame_id="base_link";
- #ifdef _REAL_FLIGHT_
+
     target.latitude = 11.052942;
     target.longitude = 106.665434;
-#else 
-    target.latitude = -35.362336;
-    target.longitude = 149.165098;
-#endif
+
     target.velocity.x = 0;
     target.velocity.y = 0;
     target.altitude = Home_altitude + desired_altitude;
@@ -220,18 +217,23 @@ int main(int argc, char **argv)
     }
    int count = 0;
    float dist =100.0;
+   float target_dist = 0;
 /*******************************************/
 //************ Approach Target**************/
 //******************************************//
 //******************************************//
 dist = Distance_calculator(lat_gps,lon_gps,target.latitude,target.longitude);
-
-if(dist < 500){
+target_dist = dist;
+target.header.seq = count;
+target.altitude = Home_altitude;
+target.header.stamp = ros::Time::now();
+global_pos_pub.publish(target);
+if(dist < 150){
      while (ros::ok() && dist > 20){
-      // Over Altitude Handle 
+      // *Over Altitude Handle 
       // ***************************
-      //****************************
-        if(z_current > 15.0){
+      //****************************/
+        if(z_current > 15.0 && (dist > (target_dist + 10))){
          set_mode_client.call(loiter_set_mode);
          while(1){
           ROS_INFO("Dangerous Altitude !");
@@ -239,12 +241,8 @@ if(dist < 500){
          }
        }
       //***************************
-      //***************************
+      //***************************/
 	dist = Distance_calculator(lat_gps,lon_gps,target.latitude,target.longitude);
-        target.header.seq = count;
-	target.altitude = Home_altitude;
-	target.header.stamp = ros::Time::now();
-	global_pos_pub.publish(target);
         ROS_INFO("Distance to target : %f", dist);
 	count++;
    	ros::spinOnce();
@@ -271,14 +269,14 @@ if(dist < 500){
    
    while(ros::ok()){
 
-        if(range.Range1 > 200){
+        if(range.Range1 > 10){
 		wet_sens = true;
 	}else wet_sens = false;
 
 	dist = range.fusedRange;
 
 	if(z_current > 2.0){
-#ifdef _REAL_FLIGHT_
+
 		if(dist < 60){
 			ROS_INFO("Altitude Below Threshold");
 			ROS_INFO("z Distance : %f", z_current);
@@ -286,7 +284,7 @@ if(dist < 500){
 			safe_ok = false;
 			descend_cmd = false;
 		}else
-#endif
+
 			descend_cmd = true;
 	}else{
 	        
@@ -491,12 +489,19 @@ ros::Duration(3.0).sleep();
 //*********Finishing Sampling Task**********
 //******************************************
 //******************************************
-     dist = 5000;
+     dist = Distance_calculator(lat_gps,lon_gps,home.latitude,home.longitude);
+     target_dist = dist;
+     home.header.seq = count;
+     home.header.stamp = ros::Time::now();
+     home.altitude = Home_altitude;
+     global_pos_pub.publish(home);
+     
+
      while (ros::ok() && dist > 20){
       // Over Altitude Handle 
       // ***************************
       //****************************
-        if(z_current > 15.0){
+        if(z_current > 15.0 &&(dist > (target_dist + 10))){
          set_mode_client.call(loiter_set_mode);
          while(1){
           ROS_INFO("Dangerous Altitude !");
@@ -505,15 +510,12 @@ ros::Duration(3.0).sleep();
        }
       //***************************
       //***************************
-	dist = Distance_calculator(lat_gps,lon_gps,home.latitude,home.longitude);
-        home.header.seq = count;
-	home.header.stamp = ros::Time::now();
-	home.altitude = Home_altitude;
-	global_pos_pub.publish(home);
-        ROS_INFO("Distance to home : %f", dist);
+	dist = Distance_calculator(lat_gps,lon_gps,home.latitude,home.longitude);    
+	ROS_INFO("Distance to home : %f", dist);
 	count++;
    	ros::spinOnce();
         fast_rate.sleep();
+	
      }
 
      ros::Duration(5.0).sleep();
